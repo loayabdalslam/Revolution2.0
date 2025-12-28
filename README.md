@@ -1,4 +1,5 @@
 # Revulation CLI 2.0
+![unnamed](https://github.com/user-attachments/assets/1a61f195-2c19-418e-87f2-94b2f8751abb)
 
 Revulation is an AI-powered CLI for:
 
