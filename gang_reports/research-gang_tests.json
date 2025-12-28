@@ -1,0 +1,54 @@
+[
+  {
+    "test": {
+      "name": "basic research test",
+      "input": "Research AI trends",
+      "expected": {
+        "contains": "fake-gang-response"
+      }
+    },
+    "run": {
+      "runId": "basic research test",
+      "workflow": "research-gang",
+      "input": "Research AI trends",
+      "nodes": [
+        {
+          "type": "member",
+          "nodeName": "researcher",
+          "output": {
+            "content": "{\"content\":\"fake-gang-response\",\"next\":null,\"actions\":[]}",
+            "next": null,
+            "actions": [],
+            "raw": "{\"content\":\"{\\\"content\\\":\\\"fake-gang-response\\\",\\\"next\\\":null,\\\"actions\\\":[]}\",\"next\":null,\"actions\":[]}",
+            "parsed": {
+              "content": "{\"content\":\"fake-gang-response\",\"next\":null,\"actions\":[]}",
+              "next": null,
+              "actions": []
+            }
+          },
+          "next": null
+        }
+      ],
+      "final": {
+        "type": "member",
+        "nodeName": "researcher",
+        "output": {
+          "content": "{\"content\":\"fake-gang-response\",\"next\":null,\"actions\":[]}",
+          "next": null,
+          "actions": [],
+          "raw": "{\"content\":\"{\\\"content\\\":\\\"fake-gang-response\\\",\\\"next\\\":null,\\\"actions\\\":[]}\",\"next\":null,\"actions\":[]}",
+          "parsed": {
+            "content": "{\"content\":\"fake-gang-response\",\"next\":null,\"actions\":[]}",
+            "next": null,
+            "actions": []
+          }
+        },
+        "next": null
+      },
+      "memory": {
+        "buckets": {}
+      }
+    },
+    "assertions": []
+  }
+]

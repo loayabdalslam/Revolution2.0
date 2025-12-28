@@ -1,0 +1,30 @@
+{
+  "name": "revulation-cli",
+  "version": "2.0.0",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "node ./bin/cli.js"
+  },
+  "bin": {
+    "revulation": "./bin/cli.js"
+  },
+  "keywords": [],
+  "author": "Loai abdalslam",
+  "license": "ISC",
+  "description": "Revulation 2.0 - AI Powered CLI with GLM",
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "@langchain/core": "^1.1.8",
+    "@langchain/openai": "^0.1.0",
+    "chalk": "^5.6.2",
+    "cheerio": "^1.0.0-rc.12",
+    "commander": "^14.0.2",
+    "dotenv": "^17.2.3",
+    "figlet": "^1.7.0",
+    "langchain": "^0.2.0",
+    "node-fetch": "^3.3.2",
+    "yaml": "^2.6.0"
+  }
+}

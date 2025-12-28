@@ -1,0 +1,66 @@
+[
+  {
+    "test": {
+      "name": "basic",
+      "input": "check edge case",
+      "asserts": [
+        {
+          "type": "contains",
+          "target": "tester",
+          "value": "fake-llm-response"
+        }
+      ]
+    },
+    "run": {
+      "runId": "basic",
+      "workflow": "test-gang",
+      "input": "check edge case",
+      "nodes": [
+        {
+          "type": "member",
+          "nodeName": "tester",
+          "output": {
+            "content": "fake-llm-response:Gang workflow input:",
+            "next": null,
+            "actions": [],
+            "raw": "{\"content\":\"fake-llm-response:Gang workflow input:\",\"next\":null,\"actions\":[]}",
+            "parsed": {
+              "content": "fake-llm-response:Gang workflow input:",
+              "next": null,
+              "actions": []
+            }
+          },
+          "next": null
+        }
+      ],
+      "final": {
+        "type": "member",
+        "nodeName": "tester",
+        "output": {
+          "content": "fake-llm-response:Gang workflow input:",
+          "next": null,
+          "actions": [],
+          "raw": "{\"content\":\"fake-llm-response:Gang workflow input:\",\"next\":null,\"actions\":[]}",
+          "parsed": {
+            "content": "fake-llm-response:Gang workflow input:",
+            "next": null,
+            "actions": []
+          }
+        },
+        "next": null
+      },
+      "memory": {
+        "buckets": {}
+      }
+    },
+    "assertions": [
+      {
+        "type": "contains",
+        "target": "tester",
+        "value": "fake-llm-response",
+        "passed": true,
+        "actualSnippet": "fake-llm-response:Gang workflow input:"
+      }
+    ]
+  }
+]
