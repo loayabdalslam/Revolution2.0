@@ -18,6 +18,7 @@
     "@clack/prompts": "^0.11.0",
     "@langchain/core": "^1.1.8",
     "@langchain/openai": "^0.1.0",
+    "@langchain/community": "^0.2.0",
     "chalk": "^5.6.2",
     "cheerio": "^1.0.0-rc.12",
     "commander": "^14.0.2",

@@ -1,7 +1,7 @@
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { createToolCallingAgent, AgentExecutor } from "langchain/agents";
 import { toolsLogger } from "../config/logging.js";
-import { webSearch } from "../tools/webSearch.js";
+import { webSearch, duckDuckGoSearch, wikipediaQuery } from "../tools/webSearch.js";
 import { scrapeUrl } from "../tools/scraper.js";
 import { listDirectory, readFileTool } from "../tools/computerTools.js";
 import { mcpCall } from "../tools/mcpTools.js";
@@ -11,6 +11,8 @@ class ToolRegistry {
     this.observer = observer;
     this.tools = new Map([
       ["web_search", webSearch],
+      ["duckduckgo_search", duckDuckGoSearch],
+      ["wikipedia_search", wikipediaQuery],
       ["scrape_url", scrapeUrl],
       ["list_directory", listDirectory],
       ["read_file", readFileTool],
@@ -210,7 +212,9 @@ export class ToolsAgent {
           this.simpleMode = true;
         } else {
           const systemPrompt = `You are ${this.config.name}, role: ${this.config.role}.
-You can call tools if needed.
+You have access to web search tools (DuckDuckGo and Wikipedia), file tools, and web scraping tools.
+When the user asks for information about people, places, or topics, use the search tools to find current information.
+Always search web sources when user asks about specific people or current events.
 Help the user with their request using the available tools.`;
 
           const prompt = ChatPromptTemplate.fromMessages([
@@ -329,7 +333,22 @@ You cannot browse the web or access files, but you can share general information
       try {
         const result = await this.executor.invoke({ input: contextualInput });
         console.log(`[${this.config.name}] Executor result received`);
-        return result.output || 'No response generated.';
+        
+        // Better error handling for result parsing
+        if (result && typeof result === 'object') {
+          if (result.output) {
+            return result.output;
+          } else if (result.output === undefined && result.message) {
+            return result.message;
+          } else {
+            console.warn(`[${this.config.name}] Unexpected result format:`, result);
+            return 'Agent execution completed but returned unexpected result format.';
+          }
+        } else if (typeof result === 'string') {
+          return result;
+        } else {
+          return result.output || 'No response generated.';
+        }
       } catch (agentError) {
         // If agent fails, fall back to simple mode
         console.warn(`[${this.config.name}] Agent execution failed, falling back to simple mode:`, agentError.message);

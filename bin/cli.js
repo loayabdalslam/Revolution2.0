@@ -111,7 +111,15 @@ async function getCodingAgent() {
 const TOOL_DESCRIPTIONS = [
   {
     name: "web_search",
-    description: "Search the web for free via DuckDuckGo Instant Answer API.",
+    description: "Comprehensive search using DuckDuckGo and Wikipedia.",
+  },
+  {
+    name: "duckduckgo_search",
+    description: "Search DuckDuckGo for current events and general web content.",
+  },
+  {
+    name: "wikipedia_search",
+    description: "Search Wikipedia for encyclopedic information.",
   },
   {
     name: "scrape_url",
@@ -230,7 +238,7 @@ program
 
 program
   .command("agentic-chat")
-  .description("Interactive AI chat with tool capabilities")
+  .description("Interactive AI chat with tool capabilities - persistent until exit")
   .action(async () => {
     console.clear();
     console.log(
@@ -239,48 +247,63 @@ program
       ),
     );
     p.intro(
-      theme.status.info(' AGENTIC CHAT ') +
-      " Talk to an AI agent with web search, file access, and development tools.",
+      theme.status.info(' AGENTIC CHAT MODE ') +
+      " Persistent chat with AI agent with DuckDuckGo, Wikipedia, file access, and development tools.",
     );
-    p.intro(
-      theme.status.info(' AGENTIC CHAT ') +
-      " Talk to an AI agent with web search, file access, and development tools.",
-    );
+
+    console.log(ResponseFormatter.separator());
+    console.log(theme.status.info("Available tools:"));
+    console.log(theme.icon.tool("• DuckDuckGo Search - Current events and web content"));
+    console.log(theme.icon.tool("• Wikipedia Search - Encyclopedic information"));
+    console.log(theme.icon.tool("• Web Scraping - Extract content from URLs"));
+    console.log(theme.icon.tool("• File Operations - Read files and list directories"));
+    console.log(ResponseFormatter.separator());
+    console.log(theme.status.info("Type 'exit' or 'quit' to end the chat session"));
+    console.log(ResponseFormatter.separator());
+
+    const agent = await getToolsAgent();
 
     while (true) {
       const task = await p.text({
         message: theme.highlight("You:"),
-        placeholder: 'Describe what you want the agent to do (or "exit" to quit)',
+        placeholder: 'Ask me anything (e.g., "search for latest AI news" or "read package.json") - type "exit" to quit',
       });
 
       if (
         p.isCancel(task) ||
-        (task && typeof task === "string" && task.toLowerCase() === "exit")
+        (task && typeof task === "string" && (task.toLowerCase() === "exit" || task.toLowerCase() === "quit"))
       ) {
-        p.outro(theme.warning("Goodbye from agentic chat."));
+        p.outro(theme.warning("Goodbye from agentic chat! Thanks for using REVULATION 2.0."));
         process.exit(0);
       }
 
+      if (!task || task.trim() === '') {
+        continue; // Skip empty messages
+      }
+
       const s = p.spinner();
-      s.start("Agent thinking (with tools)...");
+      s.start("Agent thinking with enhanced tools...");
 
       try {
-        toolsLogger.info(`Running tools agent with task: ${task}`);
+        toolsLogger.info(`Running agentic chat with task: ${task}`);
         const out = await runWithTimeout(
           (async () => {
-            const agent = await getToolsAgent();
             return agent.run(task);
           })(),
-          60000,
-          "Tools agent",
+          90000, // Increased timeout for complex queries
+          "Agentic chat",
         );
         s.stop("Done");
-        console.log(ResponseFormatter.formatAgentResponse("TOOLS AGENT", ResponseFormatter.cleanLog(out)));
-        toolsLogger.success("Tools agent completed successfully");
+
+        console.log(ResponseFormatter.formatAgentResponse("AI AGENT", ResponseFormatter.cleanLog(out)));
+        console.log(ResponseFormatter.separator());
+
+        toolsLogger.success("Agentic chat response completed successfully");
       } catch (error) {
         s.stop("Error occurred");
-        toolsLogger.error(`Tools agent failed: ${error.message}`);
-        p.note(error.message, "Error");
+        toolsLogger.error(`Agentic chat failed: ${error.message}`);
+        console.log(ResponseFormatter.formatError(`Agent error: ${error.message}`));
+        console.log(ResponseFormatter.separator());
       }
     }
   });
@@ -1132,7 +1155,7 @@ async function runGangWorkflow(configPath, input) {
     const run = await engine.runOnce(input);
 
     s.stop("Done");
-    
+
     // Extract the content
     const finalNode = run.final?.nodeName ?? null;
     const finalType = run.final?.type ?? null;
@@ -1141,7 +1164,7 @@ async function runGangWorkflow(configPath, input) {
       : run.final?.type === "squad"
         ? run.final.outputs
         : null;
-    
+
     // Display formatted output
     console.log(chalk.cyan("\n═════════════════════════════════════════════════"));
     console.log(chalk.cyan(`📋 GANG WORKFLOW RESULT`));
@@ -1151,7 +1174,7 @@ async function runGangWorkflow(configPath, input) {
     console.log(chalk.bold(`\n📄 Content:`));
     console.log(chalk.white(finalContent || "No content generated"));
     console.log(chalk.cyan("═════════════════════════════════════════════════\n"));
-    
+
     // Save to README.md
     if (finalContent) {
       try {
@@ -1180,12 +1203,12 @@ async function showMainMenu() {
     const choice = await p.select({
       message: "Choose a mode:",
       options: [
-        { value: "chat", label: "💬 Conversation with AI assistant" },
-        { value: "tools", label: "🔧 AI agent with web & file tools" },
+        { value: "chat", label: "Conversation with AI assistant" },
+        { value: "agentic-chat", label: "Persistent agentic chat (DuckDuckGo + Wikipedia)" },
         { value: "code", label: "</> Intelligent coding assistant" },
-        { value: "gang", label: "👥 Collaborative AI team workflows" },
-        { value: "tools-info", label: "ℹ️ List available tools" },
-        { value: "exit", label: "👋 Exit" },
+        { value: "gang", label: "Collaborative AI team workflows" },
+        { value: "tools-info", label: "List available tools" },
+        { value: "exit", label: "Exit" },
       ],
     });
 
@@ -1194,9 +1217,9 @@ async function showMainMenu() {
       process.exit(0);
     }
 
-    if (choice === "chat") {
-      await program.parseAsync([process.argv[0], process.argv[1], "chat"]);
-      return; // chat command has its own loop and exits when user is done
+    if (choice === "chat" || choice === "agentic-chat") {
+      await program.parseAsync([process.argv[0], process.argv[1], choice]);
+      return; // chat commands have their own loop and exits when user is done
     }
 
     if (choice === "tools") {
