@@ -5,10 +5,8 @@ import { gaiaLogger } from "../config/logging.js";
 import { theme } from "../config/theme.js";
 
 // LangChain built-in tools
-import {
-  DuckDuckGoSearchRun,
-  WikipediaQueryRun,
-} from "@langchain/community/tools";
+import { DuckDuckGoSearchRun } from "@langchain/community/tools/duckduckgo_search";
+import { WikipediaQueryRun } from "@langchain/community/tools/wikipedia_query_run";
 import {
   DynamicTool,
   Tool,
@@ -27,7 +25,7 @@ export class GaiaAgent {
       verbose: options.verbose || false,
       ...options
     };
-    
+
     this.llm = null;
     this.tools = [];
     this.agentExecutor = null;
@@ -242,7 +240,7 @@ This rigorous verification process ensures high factual accuracy and reliability
     } = questionData;
 
     const startTime = Date.now();
-    
+
     try {
       gaiaLogger.info(`Processing ${category} benchmark question: ${question.substring(0, 100)}...`);
 
@@ -250,16 +248,16 @@ This rigorous verification process ensures high factual accuracy and reliability
       let intermediateSteps = [];
 
       const expectedFormat = questionData.type || "string";
-      
+
       if (this.agentExecutor && this.shouldUseTools(category, difficulty)) {
         // Use agent with tools
         const agentInput = this.buildAgentPrompt(question, category, difficulty, context, expectedFormat);
-        
+
         try {
           const result = await this.agentExecutor.invoke({
             input: agentInput
           });
-          
+
           response = result.output;
           intermediateSteps = result.intermediateSteps || [];
         } catch (agentError) {
@@ -298,7 +296,7 @@ This rigorous verification process ensures high factual accuracy and reliability
     } catch (error) {
       const responseTime = Date.now() - startTime;
       gaiaLogger.error(`Error processing benchmark question: ${error.message}`);
-      
+
       return {
         id: id || Date.now(),
         question,
@@ -317,14 +315,14 @@ This rigorous verification process ensures high factual accuracy and reliability
     // Determine if tools should be used based on category and difficulty
     const toolFriendlyCategories = ["reasoning", "knowledge", "science", "ethics"];
     const toolRequiredDifficulties = ["hard", "expert"];
-    
-    return toolFriendlyCategories.includes(category) || 
-           toolRequiredDifficulties.includes(difficulty);
+
+    return toolFriendlyCategories.includes(category) ||
+      toolRequiredDifficulties.includes(difficulty);
   }
 
   buildAgentPrompt(question, category, difficulty, context, expectedFormat = null) {
     const categoryInfo = this.benchmarkCategories[category] || {};
-    
+
     let prompt = `You are a general AI assistant. I will ask you a question. Report your thoughts, and finish your answer with following template: FINAL ANSWER: [YOUR FINAL ANSWER]. YOUR FINAL ANSWER should be a number OR as few words as possible OR a comma separated list of numbers and/or strings.
 
 Category: ${category.toUpperCase()}
@@ -390,7 +388,7 @@ Key Guidelines:
 - For knowledge-based questions, ensure factual accuracy`;
 
     const categorySpecific = this.getCategorySpecificPrompt(category);
-    
+
     return `${basePrompt}
 
 ${categorySpecific}
@@ -530,19 +528,19 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     // Enhanced answer comparison
     const responseLower = response.toLowerCase();
     const expectedLower = expectedAnswer.toLowerCase();
-    
+
     // Check for exact match
     if (responseLower.includes(expectedLower) || expectedLower.includes(responseLower)) {
       return "exact";
     }
-    
+
     // Check for partial match using word overlap
     const responseWords = responseLower.split(/\s+/).filter(w => w.length > 2);
     const expectedWords = expectedLower.split(/\s+/).filter(w => w.length > 2);
     const commonWords = responseWords.filter(word => expectedWords.includes(word));
-    
+
     const overlapRatio = commonWords.length / Math.max(responseWords.length, expectedWords.length, 1);
-    
+
     if (overlapRatio > 0.7) {
       return "high";
     } else if (overlapRatio > 0.4) {
@@ -550,7 +548,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     } else if (overlapRatio > 0.1) {
       return "low";
     }
-    
+
     return "none";
   }
 
@@ -568,8 +566,8 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     } = config;
 
     // Load benchmark questions
-    const questions = this.loadBenchmarkQuestions(categories, difficulty, maxQuestions);
-    
+    const questions = await this.loadBenchmarkQuestions(categories, difficulty, maxQuestions);
+
     if (questions.length === 0) {
       throw new Error("No questions found for the specified criteria");
     }
@@ -580,7 +578,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
 
     console.log(theme.heading("🧪 GAIA BENCHMARK SUITE"));
     console.log(theme.status.info(`Running ${questions.length} benchmark tests...`));
-    
+
     const results = [];
     let completed = 0;
 
@@ -606,7 +604,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     }
 
     const report = this.generateBenchmarkReport(results);
-    
+
     if (saveResults) {
       await this.saveBenchmarkResults(report);
     }
@@ -614,26 +612,26 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     return report;
   }
 
-  loadBenchmarkQuestions(categories = null, difficulty = null, maxQuestions = null) {
+  async loadBenchmarkQuestions(categories = null, difficulty = null, maxQuestions = null) {
     const { gaiaBenchmarkQuestions, getRandomQuestions } = await import("../config/gaia-benchmark-config.js");
-    
+
     let questions = gaiaBenchmarkQuestions;
-    
+
     if (categories && categories.length > 0) {
       if (typeof categories === 'string') {
         categories = [categories];
       }
       questions = questions.filter(q => categories.includes(q.category));
     }
-    
+
     if (difficulty) {
       questions = questions.filter(q => q.difficulty === difficulty);
     }
-    
+
     if (maxQuestions && maxQuestions > 0) {
       questions = questions.slice(0, maxQuestions);
     }
-    
+
     return questions;
   }
 
@@ -658,11 +656,11 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
 
     // Calculate averages and breakdowns
     const successfulResults = results.filter(r => !r.error);
-    
+
     if (successfulResults.length > 0) {
       const totalConfidence = successfulResults.reduce((sum, result) => sum + result.analysis.confidenceScore, 0);
       const totalResponseTime = successfulResults.reduce((sum, result) => sum + result.responseTime, 0);
-      
+
       report.summary.averageConfidence = totalConfidence / successfulResults.length;
       report.summary.averageResponseTime = totalResponseTime / successfulResults.length;
     }
@@ -673,7 +671,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
       if (categoryResults.length > 0) {
         const categoryConfidence = categoryResults.reduce((sum, r) => sum + r.analysis.confidenceScore, 0) / categoryResults.length;
         const categoryResponseTime = categoryResults.reduce((sum, r) => sum + r.responseTime, 0) / categoryResults.length;
-        
+
         report.categoryBreakdown[category] = {
           testsRun: categoryResults.length,
           averageConfidence: categoryConfidence,
@@ -705,14 +703,14 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
 
   calculatePerformanceMetrics(results) {
     const successfulResults = results.filter(r => !r.error);
-    
+
     return {
       confidenceDistribution: this.calculateDistribution(successfulResults.map(r => r.analysis.confidenceScore)),
       responseTimeDistribution: this.calculateDistribution(successfulResults.map(r => r.responseTime / 1000)), // Convert to seconds
       categoryPerformance: Object.fromEntries(
         [...new Set(successfulResults.map(r => r.category))].map(cat => [
           cat,
-          successfulResults.filter(r => r.category === cat).reduce((sum, r) => sum + r.analysis.confidenceScore, 0) / 
+          successfulResults.filter(r => r.category === cat).reduce((sum, r) => sum + r.analysis.confidenceScore, 0) /
           successfulResults.filter(r => r.category === cat).length
         ])
       )
@@ -721,11 +719,11 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
 
   calculateDistribution(values) {
     if (values.length === 0) return { min: 0, max: 0, mean: 0, median: 0 };
-    
+
     const sorted = [...values].sort((a, b) => a - b);
     const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
     const median = sorted[Math.floor(sorted.length / 2)];
-    
+
     return {
       min: sorted[0],
       max: sorted[sorted.length - 1],
@@ -739,20 +737,20 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     try {
       const filename = `gaia-benchmark-results-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
       const filepath = `./reports/${filename}`;
-      
+
       // Create reports directory if it doesn't exist
       const fs = await import('fs/promises');
       const path = await import('path');
-      
+
       try {
         await fs.mkdir(path.dirname(filepath), { recursive: true });
       } catch (error) {
         // Directory might already exist
       }
-      
+
       await fs.writeFile(filepath, JSON.stringify(report, null, 2));
       gaiaLogger.success(`Benchmark results saved to ${filepath}`);
-      
+
       return filepath;
     } catch (error) {
       gaiaLogger.error(`Failed to save benchmark results: ${error.message}`);
@@ -800,7 +798,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
 
     const fs = await import('fs/promises');
     const path = await import('path');
-    
+
     // Generate filename if not provided
     if (!filename) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -821,7 +819,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
       // Generate JSONL format
       const jsonlLines = results.map(result => {
         const finalAnswer = this.extractFinalAnswer(result.answer);
-        
+
         const submission = {
           task_id: result.id || result.questionId || `task_${result.id}`,
           model_answer: finalAnswer
@@ -839,7 +837,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
 
       await fs.writeFile(filepath, jsonlLines, 'utf8');
       gaiaLogger.success(`GAIA submission file created: ${filepath}`);
-      
+
       return filepath;
     } catch (error) {
       gaiaLogger.error(`Failed to create submission file: ${error.message}`);
@@ -853,19 +851,19 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     // Look for "FINAL ANSWER:" pattern
     const finalAnswerRegex = /FINAL\s+ANSWER:\s*([^\n]+)/i;
     const match = response.match(finalAnswerRegex);
-    
+
     if (match && match[1]) {
       // Clean up the final answer
       let answer = match[1].trim();
-      
+
       // Remove quotes if present
       answer = answer.replace(/^["']|["']$/g, '');
-      
+
       // Convert to lowercase for string answers (GAIA expects case-insensitive)
       if (!/^\d+(\.\d+)?$/.test(answer) && !/,/.test(answer)) {
         answer = answer.toLowerCase();
       }
-      
+
       return answer;
     }
 
@@ -873,7 +871,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     const lines = response.split('\n').filter(line => line.trim());
     if (lines.length > 0) {
       const lastLine = lines[lines.length - 1].trim();
-      
+
       // Check if last line looks like a simple answer
       if (lastLine.length < 100 && !/^\s*$/.test(lastLine)) {
         return lastLine.replace(/^["']|["']$/g, '').toLowerCase();
@@ -890,7 +888,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
         const tool = step.tool || 'unknown';
         const input = typeof step.input === 'string' ? step.input : JSON.stringify(step.input);
         const output = typeof step.output === 'string' ? step.output : JSON.stringify(step.output);
-        
+
         return `Used ${tool}: ${input.substring(0, 100)}... -> ${output.substring(0, 100)}...`;
       }).join('\n');
     }
@@ -949,7 +947,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     if (successfulResults.length > 0) {
       const totalConfidence = successfulResults.reduce((sum, r) => sum + (r.analysis?.confidenceScore || 0), 0);
       const totalResponseTime = successfulResults.reduce((sum, r) => sum + (r.responseTime || 0), 0);
-      
+
       summary.overview.averageConfidence = (totalConfidence / successfulResults.length).toFixed(3);
       summary.overview.averageResponseTime = Math.round(totalResponseTime / successfulResults.length) + 'ms';
     }
@@ -959,7 +957,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     for (const category of categories) {
       const categoryResults = successfulResults.filter(r => r.category === category);
       const categoryConfidence = categoryResults.reduce((sum, r) => sum + (r.analysis?.confidenceScore || 0), 0) / categoryResults.length;
-      
+
       summary.performance.categories[category] = {
         count: categoryResults.length,
         averageConfidence: categoryConfidence.toFixed(3),
@@ -972,7 +970,7 @@ Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed
     for (const difficulty of difficulties) {
       const diffResults = successfulResults.filter(r => r.difficulty === difficulty);
       const diffConfidence = diffResults.reduce((sum, r) => sum + (r.analysis?.confidenceScore || 0), 0) / diffResults.length;
-      
+
       summary.performance.difficulties[difficulty] = {
         count: diffResults.length,
         averageConfidence: diffConfidence.toFixed(3)
