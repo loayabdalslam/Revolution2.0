@@ -249,9 +249,11 @@ This rigorous verification process ensures high factual accuracy and reliability
       let response;
       let intermediateSteps = [];
 
+      const expectedFormat = questionData.type || "string";
+      
       if (this.agentExecutor && this.shouldUseTools(category, difficulty)) {
         // Use agent with tools
-        const agentInput = this.buildAgentPrompt(question, category, difficulty, context);
+        const agentInput = this.buildAgentPrompt(question, category, difficulty, context, expectedFormat);
         
         try {
           const result = await this.agentExecutor.invoke({
@@ -263,11 +265,11 @@ This rigorous verification process ensures high factual accuracy and reliability
         } catch (agentError) {
           gaiaLogger.warn(`Agent execution failed, falling back to direct LLM: ${agentError.message}`);
           // Fallback to direct LLM
-          response = await this.callLLMDirectly(question, category, difficulty, context);
+          response = await this.callLLMDirectly(question, category, difficulty, context, expectedFormat);
         }
       } else {
         // Use direct LLM
-        response = await this.callLLMDirectly(question, category, difficulty, context);
+        response = await this.callLLMDirectly(question, category, difficulty, context, expectedFormat);
       }
 
       const responseTime = Date.now() - startTime;
@@ -320,10 +322,10 @@ This rigorous verification process ensures high factual accuracy and reliability
            toolRequiredDifficulties.includes(difficulty);
   }
 
-  buildAgentPrompt(question, category, difficulty, context) {
+  buildAgentPrompt(question, category, difficulty, context, expectedFormat = null) {
     const categoryInfo = this.benchmarkCategories[category] || {};
     
-    let prompt = `You are an expert AI agent solving GAIA benchmark questions.
+    let prompt = `You are a general AI assistant. I will ask you a question. Report your thoughts, and finish your answer with following template: FINAL ANSWER: [YOUR FINAL ANSWER]. YOUR FINAL ANSWER should be a number OR as few words as possible OR a comma separated list of numbers and/or strings.
 
 Category: ${category.toUpperCase()}
 Difficulty: ${difficulty.toUpperCase()}
@@ -335,14 +337,17 @@ Question: ${question}`;
       prompt += `\n\nContext: ${context}`;
     }
 
+    if (expectedFormat) {
+      prompt += `\n\nExpected Answer Format: ${expectedFormat}`;
+    }
+
     prompt += `
 
-Instructions:
-- Use available tools (search, calculator, reasoning) to enhance your answer
-- Provide step-by-step reasoning for complex problems
-- Show your work when applicable
-- Be precise and accurate
-- Acknowledge any uncertainties
+Formatting Instructions:
+- If you are asked for a number, don't use comma to write your number neither use units such as $ or percent sign unless specified otherwise.
+- If you are asked for a string, don't use articles, neither abbreviations (e.g. for cities), and write digits in plain text unless specified otherwise.
+- If you are asked for a comma separated list, apply above rules depending of whether element to be put in list is a number or a string.
+- Always end with "FINAL ANSWER: " followed by your answer.
 
 Tools available:
 - duckduckgo_search: For current information and web content
@@ -351,14 +356,14 @@ Tools available:
 - logical_reasoning: For structured problem analysis
 - knowledge_verification: For fact-checking and validation
 
-Please provide a comprehensive answer with clear reasoning.`;
+Please provide comprehensive reasoning followed by your final answer in the required format.`;
 
     return prompt;
   }
 
-  async callLLMDirectly(question, category, difficulty, context) {
+  async callLLMDirectly(question, category, difficulty, context, expectedFormat = "string") {
     const systemPrompt = this.buildSystemPrompt(category, difficulty);
-    const userPrompt = this.buildUserPrompt(question, context);
+    const userPrompt = this.buildUserPrompt(question, context, expectedFormat);
 
     const messages = [
       new SystemMessage(systemPrompt),
@@ -370,8 +375,7 @@ Please provide a comprehensive answer with clear reasoning.`;
   }
 
   buildSystemPrompt(category, difficulty) {
-    const basePrompt = `You are an advanced AI agent specialized in solving GAIA benchmark questions. 
-Your task is to provide accurate, detailed, and well-reasoned answers to the given questions.
+    const basePrompt = `You are a general AI assistant. I will ask you a question. Report your thoughts, and finish your answer with following template: FINAL ANSWER: [YOUR FINAL ANSWER]. YOUR FINAL ANSWER should be a number OR as few words as possible OR a comma separated list of numbers and/or strings. If you are asked for a number, don't use comma to write your number neither use units such as $ or percent sign unless specified otherwise. If you are asked for a string, don't use articles, neither abbreviations (e.g. for cities), and write digits in plain text unless specified otherwise. If you are asked for a comma separated list, apply above rules depending of whether the element to be put in list is a number or a string.
 
 Current Category: ${category}
 Difficulty Level: ${difficulty}
@@ -380,7 +384,7 @@ Key Guidelines:
 - Provide step-by-step reasoning for complex problems
 - Show your work when applicable (especially for mathematical/coding problems)
 - Be precise and accurate in your responses
-- If you're uncertain about an answer, acknowledge the uncertainty
+- Always end with "FINAL ANSWER: " followed by your answer in the correct format
 - For coding problems, provide clean, well-commented code
 - For reasoning problems, clearly explain your logical steps
 - For knowledge-based questions, ensure factual accuracy`;
@@ -391,7 +395,7 @@ Key Guidelines:
 
 ${categorySpecific}
 
-Remember: This is a benchmark evaluation. Quality and accuracy are paramount.`;
+Remember: This is a benchmark evaluation. Always end with FINAL ANSWER: followed by your correctly formatted answer.`;
   }
 
   getCategorySpecificPrompt(category) {
@@ -448,14 +452,18 @@ Remember: This is a benchmark evaluation. Quality and accuracy are paramount.`;
     return prompts[category] || "";
   }
 
-  buildUserPrompt(question, context) {
+  buildUserPrompt(question, context, expectedFormat) {
     let prompt = `Question: ${question}`;
 
     if (context && context.trim()) {
       prompt += `\n\nAdditional Context: ${context}`;
     }
 
-    prompt += `\n\nPlease provide a comprehensive answer with clear reasoning or methodology.`;
+    if (expectedFormat) {
+      prompt += `\n\nExpected Answer Type: ${expectedFormat}`;
+    }
+
+    prompt += `\n\nPlease provide comprehensive reasoning followed by your final answer in the required format, ending with "FINAL ANSWER:" followed by your answer.`;
 
     return prompt;
   }
@@ -607,9 +615,26 @@ Remember: This is a benchmark evaluation. Quality and accuracy are paramount.`;
   }
 
   loadBenchmarkQuestions(categories = null, difficulty = null, maxQuestions = null) {
-    // This would load from the gaia-benchmark-config.js file
-    // For now, return empty array - will be populated by the config file
-    return [];
+    const { gaiaBenchmarkQuestions, getRandomQuestions } = await import("../config/gaia-benchmark-config.js");
+    
+    let questions = gaiaBenchmarkQuestions;
+    
+    if (categories && categories.length > 0) {
+      if (typeof categories === 'string') {
+        categories = [categories];
+      }
+      questions = questions.filter(q => categories.includes(q.category));
+    }
+    
+    if (difficulty) {
+      questions = questions.filter(q => q.difficulty === difficulty);
+    }
+    
+    if (maxQuestions && maxQuestions > 0) {
+      questions = questions.slice(0, maxQuestions);
+    }
+    
+    return questions;
   }
 
   generateBenchmarkReport(results) {
@@ -761,5 +786,286 @@ Remember: This is a benchmark evaluation. Quality and accuracy are paramount.`;
 
   resetResults() {
     this.currentBenchmarkResults = [];
+  }
+
+  // GAIA Submission Format Generator
+  async generateSubmissionFile(results = null, filename = null) {
+    if (!results) {
+      results = this.currentBenchmarkResults;
+    }
+
+    if (!results || results.length === 0) {
+      throw new Error("No results available for submission file generation");
+    }
+
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    
+    // Generate filename if not provided
+    if (!filename) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      filename = `gaia-submission-${timestamp}.jsonl`;
+    }
+
+    // Ensure submissions directory exists
+    const submissionsDir = './submissions';
+    try {
+      await fs.mkdir(submissionsDir, { recursive: true });
+    } catch (error) {
+      // Directory might already exist
+    }
+
+    const filepath = path.join(submissionsDir, filename);
+
+    try {
+      // Generate JSONL format
+      const jsonlLines = results.map(result => {
+        const finalAnswer = this.extractFinalAnswer(result.answer);
+        
+        const submission = {
+          task_id: result.id || result.questionId || `task_${result.id}`,
+          model_answer: finalAnswer
+        };
+
+        // Add reasoning trace if available and meaningful
+        if (result.intermediateSteps && result.intermediateSteps.length > 0) {
+          submission.reasoning_trace = this.generateReasoningTrace(result);
+        } else if (result.answer && result.answer.length > 50) {
+          submission.reasoning_trace = result.answer.substring(0, 1000) + (result.answer.length > 1000 ? '...' : '');
+        }
+
+        return JSON.stringify(submission);
+      }).join('\n');
+
+      await fs.writeFile(filepath, jsonlLines, 'utf8');
+      gaiaLogger.success(`GAIA submission file created: ${filepath}`);
+      
+      return filepath;
+    } catch (error) {
+      gaiaLogger.error(`Failed to create submission file: ${error.message}`);
+      throw error;
+    }
+  }
+
+  extractFinalAnswer(response) {
+    if (!response) return "";
+
+    // Look for "FINAL ANSWER:" pattern
+    const finalAnswerRegex = /FINAL\s+ANSWER:\s*([^\n]+)/i;
+    const match = response.match(finalAnswerRegex);
+    
+    if (match && match[1]) {
+      // Clean up the final answer
+      let answer = match[1].trim();
+      
+      // Remove quotes if present
+      answer = answer.replace(/^["']|["']$/g, '');
+      
+      // Convert to lowercase for string answers (GAIA expects case-insensitive)
+      if (!/^\d+(\.\d+)?$/.test(answer) && !/,/.test(answer)) {
+        answer = answer.toLowerCase();
+      }
+      
+      return answer;
+    }
+
+    // Fallback: try to extract from last line
+    const lines = response.split('\n').filter(line => line.trim());
+    if (lines.length > 0) {
+      const lastLine = lines[lines.length - 1].trim();
+      
+      // Check if last line looks like a simple answer
+      if (lastLine.length < 100 && !/^\s*$/.test(lastLine)) {
+        return lastLine.replace(/^["']|["']$/g, '').toLowerCase();
+      }
+    }
+
+    // Final fallback: return truncated response
+    return response.substring(0, 200).trim();
+  }
+
+  generateReasoningTrace(result) {
+    if (result.intermediateSteps && result.intermediateSteps.length > 0) {
+      return result.intermediateSteps.map(step => {
+        const tool = step.tool || 'unknown';
+        const input = typeof step.input === 'string' ? step.input : JSON.stringify(step.input);
+        const output = typeof step.output === 'string' ? step.output : JSON.stringify(step.output);
+        
+        return `Used ${tool}: ${input.substring(0, 100)}... -> ${output.substring(0, 100)}...`;
+      }).join('\n');
+    }
+
+    // Generate trace from response if no intermediate steps
+    if (result.answer) {
+      // Extract reasoning part (everything before FINAL ANSWER)
+      const finalAnswerIndex = result.answer.toUpperCase().indexOf('FINAL ANSWER:');
+      if (finalAnswerIndex > 0) {
+        return result.answer.substring(0, finalAnswerIndex).trim();
+      }
+    }
+
+    return "No reasoning trace available";
+  }
+
+  // Generate benchmark summary
+  generateBenchmarkSummary(results = null) {
+    if (!results) {
+      results = this.currentBenchmarkResults;
+    }
+
+    if (!results || results.length === 0) {
+      return {
+        error: "No results available for summary generation"
+      };
+    }
+
+    const successfulResults = results.filter(r => !r.error);
+    const failedResults = results.filter(r => r.error);
+
+    const summary = {
+      overview: {
+        totalQuestions: results.length,
+        successfulRuns: successfulResults.length,
+        failedRuns: failedResults.length,
+        successRate: (successfulResults.length / results.length * 100).toFixed(2) + '%',
+        averageConfidence: 0,
+        averageResponseTime: 0,
+        timestamp: new Date().toISOString()
+      },
+      performance: {
+        categories: {},
+        difficulties: {},
+        overall: {}
+      },
+      submissionReady: {
+        totalValidForSubmission: successfulResults.length,
+        hasFinalAnswers: successfulResults.filter(r => this.extractFinalAnswer(r.answer)).length,
+        hasReasoningTraces: successfulResults.filter(r => this.generateReasoningTrace(r).length > 0).length
+      },
+      recommendations: []
+    };
+
+    // Calculate averages
+    if (successfulResults.length > 0) {
+      const totalConfidence = successfulResults.reduce((sum, r) => sum + (r.analysis?.confidenceScore || 0), 0);
+      const totalResponseTime = successfulResults.reduce((sum, r) => sum + (r.responseTime || 0), 0);
+      
+      summary.overview.averageConfidence = (totalConfidence / successfulResults.length).toFixed(3);
+      summary.overview.averageResponseTime = Math.round(totalResponseTime / successfulResults.length) + 'ms';
+    }
+
+    // Category breakdown
+    const categories = [...new Set(successfulResults.map(r => r.category))];
+    for (const category of categories) {
+      const categoryResults = successfulResults.filter(r => r.category === category);
+      const categoryConfidence = categoryResults.reduce((sum, r) => sum + (r.analysis?.confidenceScore || 0), 0) / categoryResults.length;
+      
+      summary.performance.categories[category] = {
+        count: categoryResults.length,
+        averageConfidence: categoryConfidence.toFixed(3),
+        successRate: (categoryResults.length / results.filter(r => r.category === category).length * 100).toFixed(2) + '%'
+      };
+    }
+
+    // Difficulty breakdown
+    const difficulties = [...new Set(successfulResults.map(r => r.difficulty))];
+    for (const difficulty of difficulties) {
+      const diffResults = successfulResults.filter(r => r.difficulty === difficulty);
+      const diffConfidence = diffResults.reduce((sum, r) => sum + (r.analysis?.confidenceScore || 0), 0) / diffResults.length;
+      
+      summary.performance.difficulties[difficulty] = {
+        count: diffResults.length,
+        averageConfidence: diffConfidence.toFixed(3)
+      };
+    }
+
+    // Overall performance metrics
+    summary.performance.overall = {
+      confidenceDistribution: this.calculateConfidenceDistribution(successfulResults),
+      responseTimeDistribution: this.calculateResponseTimeDistribution(successfulResults),
+      toolUsage: this.analyzeToolUsage(successfulResults)
+    };
+
+    // Generate recommendations
+    summary.recommendations = this.generateRecommendations(summary);
+
+    return summary;
+  }
+
+  calculateConfidenceDistribution(results) {
+    const ranges = {
+      'low (0.0-0.3)': 0,
+      'medium (0.3-0.7)': 0,
+      'high (0.7-1.0)': 0
+    };
+
+    results.forEach(result => {
+      const confidence = result.analysis?.confidenceScore || 0;
+      if (confidence < 0.3) ranges['low (0.0-0.3)']++;
+      else if (confidence < 0.7) ranges['medium (0.3-0.7)']++;
+      else ranges['high (0.7-1.0)']++;
+    });
+
+    return ranges;
+  }
+
+  calculateResponseTimeDistribution(results) {
+    const times = results.map(r => r.responseTime || 0).sort((a, b) => a - b);
+    if (times.length === 0) return { min: 0, max: 0, median: 0, mean: 0 };
+
+    const mean = times.reduce((sum, t) => sum + t, 0) / times.length;
+    const median = times[Math.floor(times.length / 2)];
+
+    return {
+      min: times[0] + 'ms',
+      max: times[times.length - 1] + 'ms',
+      median: median + 'ms',
+      mean: Math.round(mean) + 'ms'
+    };
+  }
+
+  analyzeToolUsage(results) {
+    const toolCounts = {};
+    results.forEach(result => {
+      if (result.toolsUsed) {
+        result.toolsUsed.forEach(tool => {
+          toolCounts[tool] = (toolCounts[tool] || 0) + 1;
+        });
+      }
+    });
+    return toolCounts;
+  }
+
+  generateRecommendations(summary) {
+    const recommendations = [];
+
+    if (summary.overview.successRate < 80) {
+      recommendations.push("Consider improving error handling and fallback mechanisms");
+    }
+
+    if (parseFloat(summary.overview.averageConfidence) < 0.7) {
+      recommendations.push("Average confidence is below 0.7 - consider adjusting model parameters");
+    }
+
+    if (parseInt(summary.overview.averageResponseTime) > 10000) {
+      recommendations.push("Response times are high - consider optimizing tool usage");
+    }
+
+    if (summary.submissionReady.hasFinalAnswers < summary.submissionReady.totalValidForSubmission) {
+      recommendations.push("Some answers missing FINAL ANSWER format - improve prompt formatting");
+    }
+
+    // Check category-specific issues
+    Object.entries(summary.performance.categories).forEach(([category, perf]) => {
+      if (parseFloat(perf.averageConfidence) < 0.6) {
+        recommendations.push(`Category '${category}' shows low confidence - consider specialized prompts`);
+      }
+    });
+
+    if (recommendations.length === 0) {
+      recommendations.push("Performance looks good - ready for submission!");
+    }
+
+    return recommendations;
   }
 }
